@@ -5,6 +5,8 @@
 package gin
 
 import (
+	"bytes"
+	"encoding/xml"
 	"fmt"
 	"net/http"
 	"testing"
@@ -16,6 +18,12 @@ func init() {
 	SetMode(TestMode)
 }
 
+func BenchmarkParseAccept(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		parseAccept("text/html , application/xhtml+xml,application/xml;q=0.9,  */* ;q=0.8")
+	}
+}
+
 type testStruct struct {
 	T *testing.T
 }
@@ -23,7 +31,7 @@ type testStruct struct {
 func (t *testStruct) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	assert.Equal(t.T, "POST", req.Method)
 	assert.Equal(t.T, "/path", req.URL.Path)
-	w.WriteHeader(500)
+	w.WriteHeader(http.StatusInternalServerError)
 	fmt.Fprint(w, "hello")
 }
 
@@ -33,16 +41,16 @@ func TestWrap(t *testing.T) {
 	router.GET("/path2", WrapF(func(w http.ResponseWriter, req *http.Request) {
 		assert.Equal(t, "GET", req.Method)
 		assert.Equal(t, "/path2", req.URL.Path)
-		w.WriteHeader(400)
+		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprint(w, "hola!")
 	}))
 
 	w := performRequest(router, "POST", "/path")
-	assert.Equal(t, 500, w.Code)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Equal(t, "hello", w.Body.String())
 
 	w = performRequest(router, "GET", "/path2")
-	assert.Equal(t, 400, w.Code)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Equal(t, "hola!", w.Body.String())
 }
 
@@ -123,4 +131,15 @@ func TestBindMiddleware(t *testing.T) {
 	assert.Panics(t, func() {
 		Bind(&bindTestStruct{})
 	})
+}
+
+func TestMarshalXMLforH(t *testing.T) {
+	h := H{
+		"": "test",
+	}
+	var b bytes.Buffer
+	enc := xml.NewEncoder(&b)
+	var x xml.StartElement
+	e := h.MarshalXML(enc, x)
+	assert.Error(t, e)
 }
